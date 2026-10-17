@@ -84,7 +84,6 @@ local function brTween(obj, goals, secs, style, dir)
     end)
     if ok and tw then
         pcall(function() tw:Play() end)
-        pcall(function() tw.Completed:Wait() end)
     else
         pcall(function()
             for k, v in pairs(goals) do obj[k] = v end
@@ -107,12 +106,6 @@ local function brJuice(btn, amount)
     end)
     btn.MouseLeave:Connect(function()
         brTween(sc, { Scale = 1 }, 0.25, Enum.EasingStyle.Back)
-    end)
-    btn.MouseButton1Down:Connect(function()
-        brTween(sc, { Scale = 1 - amount }, 0.12, Enum.EasingStyle.Quad)
-    end)
-    btn.MouseButton1Up:Connect(function()
-        brTween(sc, { Scale = 1 + amount }, 0.28, Enum.EasingStyle.Back)
     end)
 end
 
@@ -155,8 +148,21 @@ function K.brSweep(root)
     end
     pcall(brMaybeRound, root)
     pcall(function()
+        local pending, scheduled = {}, false
         K.track(root.DescendantAdded:Connect(function(o)
-            pcall(brMaybeRound, o)
+            if typeof(o) ~= "Instance" then return end
+            if BR_SURFACE[o.ClassName] or BR_CORNERABLE[o.ClassName] then
+                pending[#pending + 1] = o
+                if scheduled then return end
+                scheduled = true
+                task.delay(0.1, function()
+                    scheduled = false
+                    for i = 1, #pending do
+                        pcall(brMaybeRound, pending[i])
+                    end
+                    table.clear(pending)
+                end)
+            end
         end))
     end)
 end
@@ -17808,10 +17814,9 @@ TopRight = { AlignX = 1, Valign = Enum.VerticalAlignment.Top },
 BottomLeft = { AlignX = 0, Valign = Enum.VerticalAlignment.Bottom },
 BottomRight = { AlignX = 1, Valign = Enum.VerticalAlignment.Bottom },
 Center = { AlignX = v86[101], Valign = Enum.VerticalAlignment.Top },
-Crosshair = { AlignX = 0.5, Valign = Enum.VerticalAlignment.Center, Crosshair = true },
 }
 
-index2.SideSpecs = { "TopLeft", "TopRight", "BottomLeft", v86[52], "Center", "Crosshair" }
+index2.SideSpecs = { "TopLeft", "TopRight", "BottomLeft", v86[52], "Center" }
 
 local tbl19 = {
 success = Color3.fromRGB(72, 199, v86[15]),
@@ -17855,7 +17860,7 @@ Enabled = v118.appendPath(arg2, "Enabled"),
 Side = v118.appendPath(arg2, "Side"),
 Size = v118.appendPath(arg2, "Size"),
 Font = v118.appendPath(arg2, v86[59]),
-Offset = v118.appendPath(arg2, "Offset"),
+
 ThemeAccent = v118.appendPath(arg3, "Accent"),
 ThemeBackground = v118.appendPath(arg3, "Background"),
 ThemeText = v118.appendPath(arg3, "TextColor"),
@@ -17872,10 +17877,6 @@ _destroyed = false,
 setmetatable(tbl20, index2)
 
 v120:Connect(arg:GetPropertyChangedSignal(tbl20._pathByKey.Side), function()
-tbl20:_ApplyLayout()
-end)
-
-v120:Connect(arg:GetPropertyChangedSignal(tbl20._pathByKey.Offset), function()
 tbl20:_ApplyLayout()
 end)
 
@@ -17961,11 +17962,6 @@ index2._ApplyLayout = function(arg)
 local v120 = arg:_SideSpec()
 local n, n33, v121, v122 = fn36()
 
-if v120.Crosshair then
-n33 = 16
-n = 16
-end
-
 arg._margin.PaddingTop = UDim.new(0, n)
 arg._margin.PaddingBottom = UDim.new(0, n33)
 arg._margin.PaddingLeft = UDim.new(0, v121)
@@ -17973,23 +17969,9 @@ arg._margin.PaddingRight = UDim.new(v86[186], v122)
 local visible = arg:_Get(v86[44]) == true
 arg._container.Visible = visible
 
-if v120.Crosshair then
-local Offset = arg:_Get("Offset") or 0
-
-if Offset >= 0 then
-arg._list.VerticalAlignment = Enum.VerticalAlignment.Top
-arg._container.Position = UDim2.new(0, v86[186], 0.5, Offset)
-arg._container.Size = UDim2.new(1, 0, 0.5, -Offset)
-else
-arg._list.VerticalAlignment = Enum.VerticalAlignment.Bottom
-arg._container.Position = UDim2.fromScale(v86[186], 0)
-arg._container.Size = UDim2.new(v86[63], 0, 0.5, Offset)
-end
-else
 arg._list.VerticalAlignment = v120.Valign
 arg._container.Position = UDim2.fromScale(0, 0)
 arg._container.Size = UDim2.fromScale(1, 1)
-end
 
 for k, v123 in arg._stack, nil, nil do
 v123:SetLayout({
@@ -18448,18 +18430,7 @@ local function fn41(arg, arg2)
 arg:AddToggle({ Label = "Enable Notifications", Config = v119.appendPath(arg2, "Enabled") })
 arg:AddDropdown({ Label = v86[189], Options = v116.SideSpecs, Config = v119.appendPath(arg2, v86[50]) })
 
-arg:AddSlider({
-Label = "Crosshair Offset",
-Tooltip = "Distance from screen center for the Crosshair side. Negative is above, positive below.",
-Min = -500,
-Max = 500,
-Default = 0,
-Suffix = "px",
-Config = v119.appendPath(arg2, "Offset"),
-})
-
 arg:AddSlider({ Label = "Text Size", Min = v86[133], Max = 28, Config = v119.appendPath(arg2, "Size") })
-arg:AddDropdown({ Label = "Font", Options = v115.Order, Config = v119.appendPath(arg2, v86[59]) })
 end
 
 return function(arg, arg2, arg3, arg4, arg5, arg6, arg7)
@@ -19531,7 +19502,7 @@ tbl18.Fov = fov
 tbl18.ActivationConditions = atomic(table.clone(arg.ActivationConditions.Options))
 tbl18.TargetConditions = atomic(table.clone(arg.TargetConditions.Options))
 tbl18.TargetHitboxes = targetHitboxes2
-tbl18.HitboxSelection = { Type = "ClosestToCrosshair", Random = table.clone(arg.RandomHitboxPercentages.Options) }
+tbl18.HitboxSelection = { Type = "Closest", Random = table.clone(arg.RandomHitboxPercentages.Options) }
 tbl18.HitboxPoint = { Type = "Center", Surface = { SizeReductionPercentage = v86[160], PreserveDepth = false } }
 local extension = arg.Extension
 
@@ -19940,7 +19911,7 @@ tbl18.ActivationConditions = atomic(table.clone(arg.ActivationConditions.Options
 tbl18.ActivationChance = arg.ActivationChance
 tbl18.TargetConditions = atomic(table.clone(arg.TargetConditions.Options))
 tbl18.TargetHitboxes = targetHitboxes2
-tbl18.HitboxSelection = { Type = "ClosestToCrosshair", Random = table.clone(arg.RandomHitboxPercentages.Options) }
+tbl18.HitboxSelection = { Type = "Closest", Random = table.clone(arg.RandomHitboxPercentages.Options) }
 tbl18.HitboxPoint = { Type = "Center", Surface = { SizeReductionPercentage = 50, PreserveDepth = false } }
 local extension = arg.Extension
 
@@ -21675,7 +21646,7 @@ return false
 end
 local partSelection = target.PartSelection
 local n = 50
-local str7 = "ClosestToCrosshair"
+local str7 = "Closest"
 
 if type(partSelection) == "table" then
 if partSelection.Type == "Random" then
@@ -54186,7 +54157,7 @@ local function BF_BuildRoot(boot)
         local tab = menu:AddTab({
             Label = name,
             Icon = TAB_ICONS[((idx - 1) % #TAB_ICONS) + 1],
-            Description = "Blox Fruits",
+            Description = "",
         })
         local grid = tab:Grid({ Columns = 2 })
         built_tabs[name] = { tab = tab, grid = grid, flip = false }
